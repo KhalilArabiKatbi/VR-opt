@@ -102,6 +102,7 @@ public class OctreeSpringFiller : MonoBehaviour
     private SpringJobManager springJobManager;
     private RigidJobManager rigidJobManager;
     private MeshJobManagerCPU meshJobManager;
+    private SurfaceBound surfaceBound;
 
     // Surface point tracking
     public NativeList<SpringPointData> surfaceSpringPoints2;
@@ -119,7 +120,12 @@ public class OctreeSpringFiller : MonoBehaviour
     Dictionary<int, int> surfacePointToVertexIndex = new Dictionary<int, int>();
 
 
-    // changes for the new connections
+    [Header("Structural Integrity")]
+    public bool useStructuralIntegrity = true;
+    public float structuralSpringConstant = 500f;
+    public float structuralDamperConstant = 0.1f;
+    public float structuralMaxRestLength = 2f;
+
     public enum ConnectionType
     {
         Structure,  // 6 cardinal directions (axis-aligned)
@@ -255,6 +261,8 @@ public class OctreeSpringFiller : MonoBehaviour
         // Spring
         springJobManager = gameObject.AddComponent<SpringJobManager>();
         springJobManager.InitializeArrays(allSpringPoints, allSpringConnections);
+        surfaceBound = GetComponent<SurfaceBound>();
+        springJobManager.SetSurfaceBounds(surfaceBound);
 
         // Rigid
         rigidJobManager = gameObject.AddComponent<RigidJobManager>();
@@ -336,6 +344,8 @@ public class OctreeSpringFiller : MonoBehaviour
         // Reinitialize jobs and surface detection
         springJobManager = gameObject.AddComponent<SpringJobManager>();
         springJobManager.InitializeArrays(allSpringPoints, allSpringConnections);
+        surfaceBound = GetComponent<SurfaceBound>();
+        springJobManager.SetSurfaceBounds(surfaceBound);
 
         rigidJobManager = gameObject.AddComponent<RigidJobManager>();
         rigidJobManager.InitializeArrays(allSpringPoints, allSpringConnections);
@@ -564,6 +574,9 @@ public class OctreeSpringFiller : MonoBehaviour
             // ----- SOFT BODY MODE -----
             // 1. Schedule gravity job
             springJobManager.ScheduleGravityJobs(gravity, applyGravity);
+
+            // Update Surface Bounds (if enabled)
+            springJobManager.SetSurfaceBounds(surfaceBound);
 
             // 2. Schedule spring jobs
             springJobManager.ScheduleSpringJobs(deltaTime);
@@ -914,20 +927,28 @@ public class OctreeSpringFiller : MonoBehaviour
             var shearNeighbors = spatialHash.Query(posA, connectionRadiusL2);
             var bendNeighbors = spatialHash.Query(posA, connectionRadiusL3);
 
-            // Structure connections (6)
-            FindAndConnectNeighbors(i, posA, _structureDirections,
-                /*PointSpacing * 1.5f*/ connectionRadiusL1, 15f, ConnectionType.Structure,
-                structNeighbors, connectedPairs);
+            if (useStructuralIntegrity)
+            {
+                // Structural connections
+                FindAndConnectNeighbors(i, posA, _structureDirections,
+                    connectionRadiusL1, 15f, ConnectionType.Structure,
+                    structNeighbors, connectedPairs);
+            }
+            else
+            {
+                // Original spring connections
+                FindAndConnectNeighbors(i, posA, _structureDirections,
+                    connectionRadiusL1, 15f, ConnectionType.Structure,
+                    structNeighbors, connectedPairs);
 
-            // Shear connections (12)
-            FindAndConnectNeighbors(i, posA, _shearDirections,
-                /*PointSpacing * 3.5f*/connectionRadiusL2, 35f, ConnectionType.Shear,
-                shearNeighbors, connectedPairs);
+                FindAndConnectNeighbors(i, posA, _shearDirections,
+                    connectionRadiusL2, 35f, ConnectionType.Shear,
+                    shearNeighbors, connectedPairs);
 
-            // Bend connections (26)
-            FindAndConnectNeighbors(i, posA, _bendDirections,
-                /*PointSpacing * 5f*/connectionRadiusL3, 50f, ConnectionType.Bend,
-                bendNeighbors, connectedPairs);
+                FindAndConnectNeighbors(i, posA, _bendDirections,
+                    connectionRadiusL3, 50f, ConnectionType.Bend,
+                    bendNeighbors, connectedPairs);
+            }
         }
     }
 
@@ -950,20 +971,28 @@ public class OctreeSpringFiller : MonoBehaviour
         var shearNeighbors = spatialHash.Query(pointData.position, connectionRadiusL2);
         var bendNeighbors = spatialHash.Query(pointData.position, connectionRadiusL3);
 
-        // Structure connections (6)
-        FindAndConnectNeighbors(pointIndex, pointData.position, _structureDirections,
-            /*PointSpacing * 1.5f*/ connectionRadiusL1, 15f, ConnectionType.Structure,
-            structNeighbors, connectedPairs);
+        if (useStructuralIntegrity)
+        {
+            // Structural connections
+            FindAndConnectNeighbors(pointIndex, pointData.position, _structureDirections,
+                connectionRadiusL1, 15f, ConnectionType.Structure,
+                structNeighbors, connectedPairs);
+        }
+        else
+        {
+            // Original spring connections
+            FindAndConnectNeighbors(pointIndex, pointData.position, _structureDirections,
+                connectionRadiusL1, 15f, ConnectionType.Structure,
+                structNeighbors, connectedPairs);
 
-        // Shear connections (12)
-        FindAndConnectNeighbors(pointIndex, pointData.position, _shearDirections,
-            /*PointSpacing * 3.5f*/connectionRadiusL2, 35f, ConnectionType.Shear,
-            shearNeighbors, connectedPairs);
+            FindAndConnectNeighbors(pointIndex, pointData.position, _shearDirections,
+                connectionRadiusL2, 35f, ConnectionType.Shear,
+                shearNeighbors, connectedPairs);
 
-        // Bend connections (26)
-        FindAndConnectNeighbors(pointIndex, pointData.position, _bendDirections,
-            /*PointSpacing * 5f*/connectionRadiusL3, 50f, ConnectionType.Bend,
-            bendNeighbors, connectedPairs);
+            FindAndConnectNeighbors(pointIndex, pointData.position, _bendDirections,
+                connectionRadiusL3, 50f, ConnectionType.Bend,
+                bendNeighbors, connectedPairs);
+        }
     }
 
     void FindAndConnectNeighbors(int pointIndex, float3 position, float3[] directions,
@@ -1001,29 +1030,40 @@ public class OctreeSpringFiller : MonoBehaviour
                 if (!connectedPairs.Contains(pair))
                 {
                     float dist = math.distance(position, tempPoints[bestNeighbor].position);
-                    switch (type)
+                    if (useStructuralIntegrity)
                     {
-                        case ConnectionType.Structure:
-                            if (!IsConnected(pointIndex, bestNeighbor))
-                            {
-                                AddConnection(pointIndex, bestNeighbor, dist,
-                                maxRestLengthL1, springConstantL1, damperConstantL1);
-                            }
-                            break;
-                        case ConnectionType.Shear:
-                            if (!IsConnected(pointIndex, bestNeighbor))
-                            {
-                                AddConnection(pointIndex, bestNeighbor, dist,
-                                maxRestLengthL2, springConstantL2, damperConstantL2);
-                            }
-                            break;
-                        case ConnectionType.Bend:
-                            if (!IsConnected(pointIndex, bestNeighbor))
-                            {
-                                AddConnection(pointIndex, bestNeighbor, dist,
-                                maxRestLengthL3, springConstantL3, damperConstantL3);
-                            }
-                            break;
+                        if (!IsConnected(pointIndex, bestNeighbor))
+                        {
+                            AddConnection(pointIndex, bestNeighbor, dist,
+                                structuralMaxRestLength, structuralSpringConstant, structuralDamperConstant);
+                        }
+                    }
+                    else
+                    {
+                        switch (type)
+                        {
+                            case ConnectionType.Structure:
+                                if (!IsConnected(pointIndex, bestNeighbor))
+                                {
+                                    AddConnection(pointIndex, bestNeighbor, dist,
+                                    maxRestLengthL1, springConstantL1, damperConstantL1);
+                                }
+                                break;
+                            case ConnectionType.Shear:
+                                if (!IsConnected(pointIndex, bestNeighbor))
+                                {
+                                    AddConnection(pointIndex, bestNeighbor, dist,
+                                    maxRestLengthL2, springConstantL2, damperConstantL2);
+                                }
+                                break;
+                            case ConnectionType.Bend:
+                                if (!IsConnected(pointIndex, bestNeighbor))
+                                {
+                                    AddConnection(pointIndex, bestNeighbor, dist,
+                                    maxRestLengthL3, springConstantL3, damperConstantL3);
+                                }
+                                break;
+                        }
                     }
                     connectedPairs.Add(pair);
                 }

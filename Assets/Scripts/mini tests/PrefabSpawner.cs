@@ -13,6 +13,7 @@ public class PrefabSpawner : MonoBehaviour
 
     [Header("Physics Settings")]
     [SerializeField] private bool _resetPhysics = true;
+    [SerializeField] private bool _useSurfaceBounds = true;
 
     [Header("Spawn Controls")]
     [SerializeField] private KeyCode _spawnKey = KeyCode.Space;
@@ -109,6 +110,11 @@ public class PrefabSpawner : MonoBehaviour
         if (filler != null && _springDataInitialized)
         {
             filler.OverrideSpringData(_sharedPoints, _sharedConnections);
+        }
+        var surfaceBound = spawnedObject.GetComponent<SurfaceBound>();
+        if (surfaceBound != null)
+        {
+            surfaceBound.enabled = _useSurfaceBounds;
         }
 
         return spawnedObject;
