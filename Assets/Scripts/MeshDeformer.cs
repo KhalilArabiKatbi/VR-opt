@@ -719,21 +719,130 @@ public class MeshDeformer : MonoBehaviour
 
     public void MergeAllTriangles(bool create = true)
     {
-        // 1. Identify candidate vertices for merging.
-        //    - A vertex is a candidate if it's not on a boundary and has 6 neighbors.
-        //    - The triangles around it should form a hexagon.
+        List<int> allTriangleIndices = new List<int>();
+        for (int i = 0; i < currentTriangles.Length / 3; i++)
+        {
+            allTriangleIndices.Add(i);
+        }
+        MergeSelectedTriangles(allTriangleIndices, create);
+    }
 
-        // 2. For each candidate vertex, check if the surrounding triangles can be merged.
-        //    - This means that the 6 triangles can be replaced by 2 larger triangles.
+    private void MergeSelectedTriangles(List<int> triangleIndices, bool create = true)
+    {
+        Vector3[] oldVertices = workingMesh.vertices;
+        int[] oldTriangles = workingMesh.triangles;
+        List<Vector3> newVertices = new List<Vector3>(oldVertices);
+        List<int> newTriangles = new List<int>();
 
-        // 3. Create a new mesh with the merged triangles.
-        //    - This involves creating new vertex and triangle arrays.
+        // A map from vertex index to the triangles it's a part of
+        Dictionary<int, List<int>> vertexToTrianglesMap = new Dictionary<int, List<int>>();
+        for (int i = 0; i < oldTriangles.Length; i++)
+        {
+            if (!vertexToTrianglesMap.ContainsKey(oldTriangles[i]))
+            {
+                vertexToTrianglesMap[oldTriangles[i]] = new List<int>();
+            }
+            vertexToTrianglesMap[oldTriangles[i]].Add(i / 3);
+        }
 
-        // 4. Update the mesh data.
-        //    - Clear the old mesh data and assign the new arrays.
+        // Identify vertices that are candidates for removal.
+        // A vertex is a candidate for removal if it's connected to exactly 3 other vertices.
+        List<int> removableVertices = new List<int>();
+        for (int i = 0; i < newVertices.Count; i++)
+        {
+            if (vertexToTrianglesMap.ContainsKey(i) && vertexToTrianglesMap[i].Count == 3)
+            {
+                removableVertices.Add(i);
+            }
+        }
 
-        // For now, I will just log a message to the console.
-        Debug.Log("Merging triangles...");
+        if (removableVertices.Count == 0)
+        {
+            return; // No vertices to merge
+        }
+
+        // For simplicity, let's just merge the first removable vertex we find.
+        // A more robust implementation would merge all possible vertices in one pass.
+        int vertexToRemove = removableVertices[0];
+
+        // Get the triangles connected to this vertex
+        List<int> trianglesToMerge = vertexToTrianglesMap[vertexToRemove];
+
+        // Get the other vertices of the triangles
+        HashSet<int> otherVertices = new HashSet<int>();
+        foreach (int triIndex in trianglesToMerge)
+        {
+            int baseIndex = triIndex * 3;
+            for (int i = 0; i < 3; i++)
+            {
+                int vertexIndex = oldTriangles[baseIndex + i];
+                if (vertexIndex != vertexToRemove)
+                {
+                    otherVertices.Add(vertexIndex);
+                }
+            }
+        }
+
+        // We should have 3 other vertices, forming a larger triangle
+        if (otherVertices.Count == 3)
+        {
+            List<int> newTriangle = otherVertices.ToList();
+            newTriangles.AddRange(newTriangle);
+
+            // Add all other triangles that are not part of the merge
+            for (int i = 0; i < oldTriangles.Length / 3; i++)
+            {
+                if (!trianglesToMerge.Contains(i))
+                {
+                    int baseIndex = i * 3;
+                    newTriangles.Add(oldTriangles[baseIndex]);
+                    newTriangles.Add(oldTriangles[baseIndex + 1]);
+                    newTriangles.Add(oldTriangles[baseIndex + 2]);
+                }
+            }
+
+            // Create a new vertex list without the removed vertex
+            List<Vector3> finalVertices = new List<Vector3>();
+            Dictionary<int, int> oldToNewIndexMap = new Dictionary<int, int>();
+            int newIndex = 0;
+            for (int i = 0; i < newVertices.Count; i++)
+            {
+                if (i != vertexToRemove)
+                {
+                    finalVertices.Add(newVertices[i]);
+                    oldToNewIndexMap[i] = newIndex;
+                    newIndex++;
+                }
+            }
+
+            // Update triangle indices
+            for (int i = 0; i < newTriangles.Count; i++)
+            {
+                newTriangles[i] = oldToNewIndexMap[newTriangles[i]];
+            }
+
+            // Update mesh data
+            workingMesh.Clear();
+            workingMesh.vertices = finalVertices.ToArray();
+            workingMesh.triangles = newTriangles.ToArray();
+            workingMesh.RecalculateNormals();
+            workingMesh.RecalculateBounds();
+
+            triangleDataList.Clear();
+            int triangleCount = workingMesh.triangles.Length / 3;
+            for (int i = 0; i < triangleCount; i++)
+            {
+                triangleDataList.Add(new TriangleData
+                {
+                    originalIndex = i,
+                    subdivisionLevel = 0, // Reset subdivision level
+                    canSubdivide = true
+                });
+            }
+
+            baseVertices = workingMesh.vertices;
+            currentVertices = baseVertices.Clone() as Vector3[];
+        }
     }
 
     private struct WeightedInfluence
