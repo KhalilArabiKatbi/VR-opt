@@ -42,6 +42,10 @@
     "com.unity.modules.video": "1.0.0",
     "com.unity.modules.vr": "1.0.0",
     "com.unity.modules.wind": "1.0.0",
-    "com.unity.modules.xr": "1.0.0"
+    "com.unity.modules.xr": "1.0.0",
+    "com.unity.dots.runtime": "1.1.0-pre.3",
+    "com.unity.entities": "1.1.0-pre.3",
+    "com.unity.physics": "1.1.0-pre.3",
+    "com.unity.rendering.hybrid": "1.1.0-pre.3"
   }
 }
