@@ -235,7 +235,7 @@ public class SpringJobManager : MonoBehaviour
                 shrink = shrink,
                 stretch = stretch,
             };
-            boundsJobHandle = boundsJob.Schedule(pointJobHandle);
+            boundsJobHandle = boundsJob.Schedule(springConnections.Length, 64, pointJobHandle);
         }
     }
 
@@ -265,46 +265,43 @@ public class SpringJobManager : MonoBehaviour
     }
 
     [BurstCompile]
-    struct ApplyBoundsJob : IJob
+    struct ApplyBoundsJob : IJobParallelFor
     {
         public NativeArray<SpringPointData> points;
         [ReadOnly] public NativeArray<SpringConnectionData> connections;
         [ReadOnly] public float shrink;
         [ReadOnly] public float stretch;
 
-        public void Execute()
+        public void Execute(int i)
         {
-            for (int i = 0; i < connections.Length; i++)
+            var connection = connections[i];
+            var p1 = points[connection.pointA];
+            var p2 = points[connection.pointB];
+
+            float3 p1Pos = p1.position;
+            float3 p2Pos = p2.position;
+
+            float restLength = connection.restLength;
+            float min = restLength - (restLength * shrink);
+            float max = restLength + (restLength * stretch);
+
+            float3 delta = p2Pos - p1Pos;
+            float dist = math.length(delta);
+            float error = 0;
+
+            if (dist > max) error = dist - max;
+            else if (dist < min) error = dist - min;
+
+            if (error != 0)
             {
-                var connection = connections[i];
-                var p1 = points[connection.pointA];
-                var p2 = points[connection.pointB];
+                float3 correction = math.normalize(delta) * error;
+                float3 pHalf = correction * 0.5f;
 
-                float3 p1Pos = p1.position;
-                float3 p2Pos = p2.position;
+                p1.position += pHalf;
+                p2.position -= pHalf;
 
-                float restLength = connection.restLength;
-                float min = restLength - (restLength * shrink);
-                float max = restLength + (restLength * stretch);
-
-                float3 delta = p2Pos - p1Pos;
-                float dist = math.length(delta);
-                float error = 0;
-
-                if (dist > max) error = dist - max;
-                else if (dist < min) error = dist - min;
-
-                if (error != 0)
-                {
-                    float3 correction = math.normalize(delta) * error;
-                    float3 pHalf = correction * 0.5f;
-
-                    p1.position += pHalf;
-                    p2.position -= pHalf;
-
-                    points[connection.pointA] = p1;
-                    points[connection.pointB] = p2;
-                }
+                points[connection.pointA] = p1;
+                points[connection.pointB] = p2;
             }
         }
     }
