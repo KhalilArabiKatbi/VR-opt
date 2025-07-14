@@ -42,8 +42,3 @@ public partial struct GravitySystem : ISystem
         }
     }
 }
-
-public struct Gravity : IComponentData
-{
-    public float3 Value;
-}

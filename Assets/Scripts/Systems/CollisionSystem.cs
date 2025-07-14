@@ -60,10 +60,3 @@ public partial struct CollisionSystem : ISystem
         }
     }
 }
-
-public struct Ground : IComponentData
-{
-    public float Level;
-    public float Bounce;
-    public float Friction;
-}

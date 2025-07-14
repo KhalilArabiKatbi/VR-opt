@@ -32,3 +32,37 @@ public struct SpringConnection : IComponentData
     public float springConstant;
     public float damperConstant;
 }
+
+public struct Gravity : IComponentData
+{
+    public float3 Value;
+}
+
+public struct Ground : IComponentData
+{
+    public float Level;
+    public float Bounce;
+    public float Friction;
+}
+
+public struct MeshDeformerComponent : IComponentData
+{
+    public UnityEngine.Mesh mesh;
+    public UnityEngine.Matrix4x4 worldToLocal;
+    public Unity.Collections.NativeArray<VertexWeightBinding> vertexWeightBindings;
+}
+
+[System.Serializable]
+public struct WeightedPoint
+{
+    public int index;
+    public float weight;
+}
+
+[System.Serializable]
+public struct VertexWeightBinding
+{
+    public WeightedPoint wp0;
+    public WeightedPoint wp1;
+    public WeightedPoint wp2;
+}
