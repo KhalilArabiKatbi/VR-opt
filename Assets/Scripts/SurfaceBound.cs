@@ -21,26 +21,30 @@ public class SurfaceBound : MonoBehaviour
             Vector3 p2Pos = p2.position;
 
             float restLength = connection.restLength;
-            float min = restLength - (restLength * shrink);
-            float max = restLength + (restLength * stretch);
+            float dist = Vector3.Distance(p1Pos, p2Pos);
 
-            Vector3 delta = p2Pos - p1Pos;
-            float dist = delta.magnitude;
-            float error = 0;
-
-            if (dist > max) error = dist - max;
-            else if (dist < min) error = dist - min;
-
-            if (error != 0)
+            if (dist > restLength)
             {
-                Vector3 correction = delta.normalized * error;
-                Vector3 pHalf = correction * 0.5f;
+                float min = restLength - (restLength * shrink);
+                float max = restLength + (restLength * stretch);
 
-                p1.position += pHalf;
-                p2.position -= pHalf;
+                float error = 0;
 
-                points[connection.pointA] = p1;
-                points[connection.pointB] = p2;
+                if (dist > max) error = dist - max;
+                else if (dist < min) error = dist - min;
+
+                if (error != 0)
+                {
+                    Vector3 delta = p2Pos - p1Pos;
+                    Vector3 correction = delta.normalized * error;
+                    Vector3 pHalf = correction * 0.5f;
+
+                    p1.position += (Unity.Mathematics.float3)pHalf;
+                    p2.position -= (Unity.Mathematics.float3)pHalf;
+
+                    points[connection.pointA] = p1;
+                    points[connection.pointB] = p2;
+                }
             }
         }
     }
