@@ -325,6 +325,8 @@ public class OctreeSpringFiller : MonoBehaviour
 
         // Apply layer preset if selected
         ApplyLayerPreset();
+
+        pointSpatialHash = new SpatialHash<int>(PointSpacing * 2);
     }
 
 
@@ -486,6 +488,12 @@ public class OctreeSpringFiller : MonoBehaviour
 
     void FixedUpdate()
     {
+        pointSpatialHash.Clear();
+        for (int i = 0; i < allSpringPoints.Length; i++)
+        {
+            pointSpatialHash.Add(allSpringPoints[i].position, i);
+        }
+
         if (surfaceSpringPoints2.IsCreated)
         {
             // Calculate surface points
@@ -1403,6 +1411,7 @@ public class OctreeSpringFiller : MonoBehaviour
 
     // Add this dictionary as a class member to cache closest points
     private Dictionary<int, int> vertexToClosestPointMap = new Dictionary<int, int>();
+    private SpatialHash<int> pointSpatialHash;
 
     void UpdateMeshFromPoints()
     {
@@ -1459,8 +1468,8 @@ public class OctreeSpringFiller : MonoBehaviour
             {
                 // Fallback if cache is invalid
                 Vector3 worldVertex = transform.TransformPoint(currentVertices[i]);
-                SpringPointData closestPoint = FindClosestPoint(worldVertex);
-                newVertices[i] = transform.InverseTransformPoint(closestPoint.position);
+                int closestPoint = FindClosestPointIndex(worldVertex);
+                newVertices[i] = transform.InverseTransformPoint(allSpringPoints[closestPoint].position);
             }
         }
 
@@ -1493,9 +1502,26 @@ public class OctreeSpringFiller : MonoBehaviour
     // Helper method to find the index of the closest point
     private int FindClosestPointIndex(Vector3 worldPos)
     {
-        int closestIndex = 0;
+        var nearbyPoints = pointSpatialHash.Query(worldPos, PointSpacing * 2);
+        int closestIndex = -1;
         float minDist = float.MaxValue;
 
+        foreach (int pointIndex in nearbyPoints)
+        {
+            float dist = Vector3.Distance(worldPos, allSpringPoints[pointIndex].position);
+            if (dist < minDist)
+            {
+                minDist = dist;
+                closestIndex = pointIndex;
+            }
+        }
+
+        if (closestIndex != -1)
+        {
+            return closestIndex;
+        }
+
+        // Fallback to searching all points if no points are found in the spatial hash
         for (int i = 0; i < allSpringPoints.Length; i++)
         {
             float dist = Vector3.Distance(worldPos, allSpringPoints[i].position);
@@ -1659,4 +1685,85 @@ public class OctreeSpringFiller : MonoBehaviour
         }
     }
 
+    private class SpatialHash<T> where T : class
+    {
+        private readonly Dictionary<Vector3Int, List<T>> buckets = new Dictionary<Vector3Int, List<T>>();
+        private readonly float cellSize;
+
+        public SpatialHash(float cellSize)
+        {
+            this.cellSize = cellSize;
+        }
+
+        public void Clear()
+        {
+            buckets.Clear();
+        }
+
+        public void Add(Vector3 position, T item)
+        {
+            Vector3Int cell = GetCell(position);
+            if (!buckets.TryGetValue(cell, out var list))
+            {
+                list = new List<T>();
+                buckets[cell] = list;
+            }
+            list.Add(item);
+        }
+
+        public IEnumerable<T> Query(Vector3 position, float radius)
+        {
+            List<T> results = new List<T>();
+            Vector3Int centerCell = GetCell(position);
+            int cellRadius = Mathf.CeilToInt(radius / cellSize) + 1; // Conservative
+
+            for (int x = -cellRadius; x <= cellRadius; x++)
+            {
+                for (int y = -cellRadius; y <= cellRadius; y++)
+                {
+                    for (int z = -cellRadius; z <= cellRadius; z++)
+                    {
+                        Vector3Int neighborCell = centerCell + new Vector3Int(x, y, z);
+                        if (buckets.TryGetValue(neighborCell, out var list))
+                        {
+                            foreach (var item in list)
+                            {
+                                results.Add(item);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return results;
+        }
+
+        private Vector3Int GetCell(Vector3 position)
+        {
+            return new Vector3Int(
+                Mathf.FloorToInt(position.x / cellSize),
+                Mathf.FloorToInt(position.y / cellSize),
+                Mathf.FloorToInt(position.z / cellSize)
+            );
+        }
+    }
+
+    // NEW: Simple Vector3Int struct (since Unity doesn't have one built-in)
+    private struct Vector3Int
+    {
+        public int x, y, z;
+
+        public Vector3Int(int x, int y, int z)
+        {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+
+        public static Vector3Int operator +(Vector3Int a, Vector3Int b) => new Vector3Int(a.x + b.x, a.y + b.y, a.z + b.z);
+
+        public override int GetHashCode() => (x * 73856093) ^ (y * 19349663) ^ (z * 83492791);
+
+        public override bool Equals(object obj) => obj is Vector3Int other && x == other.x && y == other.y && z == other.z;
+    }
 }
