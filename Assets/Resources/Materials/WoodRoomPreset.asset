@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bfb2b112fe773af43b6b2920f92a6b10, type: 3}
+  m_Name: WoodRoomPreset
+  m_EditorClassIdentifier: 
+  type: 7
+  material: {fileID: 2100000, guid: 92dfcc09cc10b0a429ec0a645bc91616, type: 2}
+  isRigid: 1
+  totalMass: 120
+  bounciness: 0.2
+  friction: 0.5
+  springConstantL1: 220
+  damperConstantL1: 0.7
+  connectionRadiusL1: 1
+  maxRestLengthL1: 4
+  springConstantL2: 180
+  damperConstantL2: 0.6
+  connectionRadiusL2: 2
+  maxRestLengthL2: 6
+  springConstantL3: 140
+  damperConstantL3: 0.5
+  connectionRadiusL3: 3
+  maxRestLengthL3: 8
