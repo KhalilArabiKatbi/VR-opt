@@ -19,7 +19,12 @@ public static class GJK
 {
     private const int MaxGJKIterations = 32;
     private const int MaxEPAIterations = 32;
-    private const float Epsilon = 0.0001f;
+    private const float Epsilon = 0.001f;
+
+    private static List<float3> simplex = new List<float3>(4);
+    private static List<float3> polytope = new List<float3>(32);
+    private static List<int> faces = new List<int>(64);
+    private static List<int2> edges = new List<int2>(32);
 
     /// <summary>
     /// Detects collision between two soft bodies using the GJK algorithm.
@@ -28,7 +33,7 @@ public static class GJK
     public static bool DetectCollision(OctreeSpringFiller bodyA, OctreeSpringFiller bodyB, out CollisionInfo info)
     {
         info = new CollisionInfo();
-        List<float3> simplex = new List<float3>();
+        simplex.Clear();
         float3 direction = (float3)(bodyA.transform.position - bodyB.transform.position);
         if (math.all(direction == float3.zero))
         {
@@ -242,14 +247,10 @@ public static class GJK
     /// </summary>
     private static void EPA(List<float3> simplex, OctreeSpringFiller bodyA, OctreeSpringFiller bodyB, out float3 normal, out float depth)
     {
-        List<float3> polytope = new List<float3>(simplex);
-        List<int> faces = new List<int>
-        {
-            0, 1, 2,
-            0, 3, 1,
-            0, 2, 3,
-            1, 3, 2
-        };
+        polytope.Clear();
+        polytope.AddRange(simplex);
+        faces.Clear();
+        faces.AddRange(new int[] { 0, 1, 2, 0, 3, 1, 0, 2, 3, 1, 3, 2 });
 
         for (int i = 0; i < MaxEPAIterations; i++)
         {
@@ -280,7 +281,7 @@ public static class GJK
             float3 support = Support(bodyA, bodyB, minNormal);
             float sDist = math.dot(minNormal, support);
 
-            if (math.abs(sDist - minDistance) < Epsilon)
+            if (math.abs(sDist - minDistance) < Epsilon || math.distance(support, polytope[polytope.Count-1]) < Epsilon)
             {
                 // Convergence
                 normal = minNormal;
@@ -289,10 +290,10 @@ public static class GJK
             }
 
             // Expand polytope
-            List<int> newFaces = new List<int>();
-            List<int2> edges = new List<int2>();
+            edges.Clear();
             int newPointIndex = polytope.Count;
             polytope.Add(support);
+            List<int> newFaces = new List<int>();
 
             for (int j = 0; j < faces.Count / 3; j++)
             {
@@ -323,7 +324,8 @@ public static class GJK
             {
                 newFaces.AddRange(new int[] { edge.x, edge.y, newPointIndex });
             }
-            faces = newFaces;
+            faces.Clear();
+            faces.AddRange(newFaces);
         }
 
         // Max iterations reached, return best guess

@@ -186,7 +186,8 @@ public class CollisionManager : MonoBehaviour
         // Apply response at each contact point
         foreach (var contact in contacts)
         {
-            ApplyContactPointResponse(obj1, obj2, contact);
+            GG(obj1, obj2, contact);
+            //ApplyContactPointResponse(obj1, obj2, contact);
             currentFrameContacts.Add(contact); // For debug visualization
         }
 
@@ -567,38 +568,93 @@ public class CollisionManager : MonoBehaviour
         return closestIndex;
     }
 
+    private void GG(OctreeSpringFiller obj1, OctreeSpringFiller obj2, ContactPoint contact)
+    {
+        SpringPointData point1 = obj1.surfaceSpringPoints2[contact.point1Index];
+        SpringPointData point2 = obj2.surfaceSpringPoints2[contact.point2Index];
+
+        if (contact.normal == Vector3.zero) return; // Simple Unnecessary Check
+
+        float impulseMagnitude = CalculateContactImpulse(obj1, obj2, contact);
+        Vector3 impulse = contact.normal * impulseMagnitude;
+
+        if (point1.isFixed == 0)
+        {
+            point1.velocity += (float3)(impulse / point1.mass);
+            obj1.surfaceSpringPoints2[contact.point1Index] = point1;
+        }
+
+        if (point2.isFixed == 0)
+        {
+            point2.velocity -= (float3)(impulse / point2.mass);
+            obj2.surfaceSpringPoints2[contact.point2Index] = point2;
+        }
+
+        // Apply impulse to nearby points in both objects
+        ApplyImpulseToNearbyPoints(obj1, contact.worldPosition, impulse, contact.influenceRadius, contact.normal, contact.restitution);
+        ApplyImpulseToNearbyPoints(obj2, contact.worldPosition, -impulse, contact.influenceRadius, -contact.normal, contact.restitution);
+
+        // Apply friction if the contact friction is significant
+        if (contact.friction > 0.001f)
+        {
+            Vector3 frictionImpulse = CalculateFrictionImpulse(obj1, obj2, contact, impulseMagnitude);
+            ApplyImpulseToNearbyPoints(obj1, contact.worldPosition, frictionImpulse, contact.influenceRadius, contact.normal, contact.friction);
+            ApplyImpulseToNearbyPoints(obj2, contact.worldPosition, -frictionImpulse, contact.influenceRadius, -contact.normal, contact.friction);
+        }
+        if (contact.penetrationDepth <= penetrationSlop) return;
+        float correctionAmount = (contact.penetrationDepth - penetrationSlop) * penetrationCorrectionFactor;
+        Vector3 correction = contact.normal * correctionAmount;
+
+
+        // Compute effective invMass based on nearby points
+        float effectiveInvMass1 = CalculateEffectiveInvMass(obj1, contact.worldPosition, contact.influenceRadius, contact.normal);
+        float effectiveInvMass2 = CalculateEffectiveInvMass(obj2, contact.worldPosition, contact.influenceRadius, -contact.normal);
+        float totalEffectiveInvMass = effectiveInvMass1 + effectiveInvMass2;
+
+        if (totalEffectiveInvMass == 0f) return;
+
+        Vector3 correction1 = -correction * (effectiveInvMass1 / totalEffectiveInvMass);
+        Vector3 correction2 = correction * (effectiveInvMass2 / totalEffectiveInvMass);
+
+        ApplyPositionCorrectionToNearbyPoints(obj1, contact.worldPosition, correction1, contact.influenceRadius, contact.normal);
+        ApplyPositionCorrectionToNearbyPoints(obj2, contact.worldPosition, correction2, contact.influenceRadius, -contact.normal);
+    }
+
     private void ApplyContactPointResponse(OctreeSpringFiller obj1, OctreeSpringFiller obj2, ContactPoint contact)
     {
         SpringPointData point1 = obj1.surfaceSpringPoints2[contact.point1Index];
         SpringPointData point2 = obj2.surfaceSpringPoints2[contact.point2Index];
 
-        //// Calculate impulse magnitude for this contact using per-point material properties
-        //float impulseMagnitude = CalculateContactImpulse(obj1, obj2, contact);
-        //Vector3 impulse = contact.normal * impulseMagnitude;
+        // Calculate impulse magnitude for this contact using per-point material properties
+        float impulseMagnitude = CalculateContactImpulse(obj1, obj2, contact);
+        Vector3 impulse = contact.normal * impulseMagnitude;
 
-        //if (point1.isFixed == 0)
-        //{
-        //    point1.velocity += (float3)(impulse / point1.mass);
-        //    obj1.surfaceSpringPoints2[contact.point1Index] = point1;
-        //}
+        if (point1.isFixed == 0)
+        {
+            point1.velocity += (float3)(impulse / point1.mass);
+            obj1.surfaceSpringPoints2[contact.point1Index] = point1;
+        }
 
-        //if (point2.isFixed == 0)
-        //{
-        //    point2.velocity -= (float3)(impulse / point2.mass);
-        //    obj2.surfaceSpringPoints2[contact.point2Index] = point2;
-        //}
+        if (point2.isFixed == 0)
+        {
+            point2.velocity -= (float3)(impulse / point2.mass);
+            obj2.surfaceSpringPoints2[contact.point2Index] = point2;
+        }
 
-        //// Apply impulse to nearby points in both objects
-        //ApplyImpulseToNearbyPoints(obj1, contact.worldPosition, impulse, contact.influenceRadius, contact.normal, contact.restitution);
-        //ApplyImpulseToNearbyPoints(obj2, contact.worldPosition, -impulse, contact.influenceRadius, -contact.normal, contact.restitution);
+        // Apply impulse to nearby points in both objects
+        ApplyImpulseToNearbyPoints(obj1, contact.worldPosition, impulse, contact.influenceRadius, contact.normal, contact.restitution);
+        ApplyImpulseToNearbyPoints(obj2, contact.worldPosition, -impulse, contact.influenceRadius, -contact.normal, contact.restitution);
 
-        //// Apply friction if the contact friction is significant
-        //if (contact.friction > 0.001f)
-        //{
-        //    Vector3 frictionImpulse = CalculateFrictionImpulse(obj1, obj2, contact, impulseMagnitude);
-        //    ApplyImpulseToNearbyPoints(obj1, contact.worldPosition, frictionImpulse, contact.influenceRadius, contact.normal, contact.friction);
-        //    ApplyImpulseToNearbyPoints(obj2, contact.worldPosition, -frictionImpulse, contact.influenceRadius, -contact.normal, contact.friction);
-        //}
+        // Apply friction if the contact friction is significant
+        if (contact.friction > 0.001f)
+        {
+            Vector3 frictionImpulse = CalculateFrictionImpulse(obj1, obj2, contact, impulseMagnitude);
+            ApplyImpulseToNearbyPoints(obj1, contact.worldPosition, frictionImpulse, contact.influenceRadius, contact.normal, contact.friction);
+            ApplyImpulseToNearbyPoints(obj2, contact.worldPosition, -frictionImpulse, contact.influenceRadius, -contact.normal, contact.friction);
+        }
+
+        // Position correction to resolve penetration
+        ApplyPositionCorrection(obj1, obj2, contact);
 
         // Continuous penalty forces and damping for sustained contacts
         ApplyContinuousContactForces(obj1, obj2, contact);
