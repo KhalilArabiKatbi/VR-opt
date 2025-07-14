@@ -1685,7 +1685,7 @@ public class OctreeSpringFiller : MonoBehaviour
         }
     }
 
-    private class SpatialHash<T> where T : class
+    private class SpatialHash<T>
     {
         private readonly Dictionary<Vector3Int, List<T>> buckets = new Dictionary<Vector3Int, List<T>>();
         private readonly float cellSize;
